@@ -3,6 +3,7 @@ FROM nginx:1.27-alpine
 RUN mkdir -p /usr/share/nginx/html/vendor/bootstrap /usr/share/nginx/html/vendor/chartjs /usr/share/nginx/html/vendor/papaparse \
     && wget -qO /usr/share/nginx/html/vendor/bootstrap/bootstrap.min.css https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css \
     && wget -qO /usr/share/nginx/html/vendor/chartjs/chart.umd.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js \
+    && wget -qO /usr/share/nginx/html/vendor/chartjs/chartjs-plugin-datalabels.min.js https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js \
     && wget -qO /usr/share/nginx/html/vendor/papaparse/papaparse.min.js https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js
 
 COPY painel-cirurgia/ /usr/share/nginx/html/

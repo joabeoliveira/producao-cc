@@ -1,7 +1,9 @@
 const state = { rows: [], filtros: {} };
 const charts = {};
 
-const CORES = ["#0b4f8a","#1f8a5b","#e0a800","#c0392b","#6c5ce7","#0984e3","#00b894","#e17055","#636e72","#fd79a8"];
+const CORES = ["#4285f4","#ea4335","#fbbc04","#34a853","#a142f4","#24c1e0","#f538a0","#fa7b17","#5f6368","#12b5cb"];
+
+if(typeof ChartDataLabels!=="undefined") Chart.register(ChartDataLabels);
 
 Papa.parse("data/base_tratada.csv", {
   download: true, header: true, skipEmptyLines: true,
@@ -217,12 +219,38 @@ function chart(id,type,data,label,horizontal=false,pareto=[]){
   if(pareto.length){
     datasets.push({type:"line",label:"% acumulado",data:pareto,borderColor:CORES[3],backgroundColor:CORES[3],yAxisID:"y1"});
   }
-  const options={responsive:true,maintainAspectRatio:false,indexAxis:horizontal?"y":"x",plugins:{legend:{display:type==="doughnut" || pareto.length>0}}};
+  const options={
+    responsive:true,
+    maintainAspectRatio:false,
+    indexAxis:horizontal?"y":"x",
+    layout:{padding:{top:22,right:18}},
+    plugins:{
+      legend:{display:type==="doughnut" || pareto.length>0,labels:{color:"#3c4043",usePointStyle:true}},
+      datalabels:{
+        display:context=>Number(context.dataset.data[context.dataIndex])>0,
+        color:context=>context.chart.config.type==="doughnut"?"#ffffff":"#3c4043",
+        backgroundColor:context=>context.chart.config.type==="doughnut"?"rgba(32,33,36,.72)":null,
+        borderRadius:4,
+        padding:context=>context.chart.config.type==="doughnut"?4:2,
+        anchor:context=>context.chart.config.type==="doughnut"?"center":"end",
+        align:context=>context.chart.config.type==="doughnut"?"center":"end",
+        clamp:true,
+        font:{weight:"bold",size:11},
+        formatter:(value,context)=>context.dataset.yAxisID==="y1"?value+"%":formatChartValue(value)
+      }
+    }
+  };
   if(type!=="doughnut"){
     options.scales={x:{beginAtZero:true},y:{beginAtZero:true}};
     if(pareto.length) options.scales.y1={beginAtZero:true,max:100,position:"right",grid:{drawOnChartArea:false},ticks:{callback:v=>v+"%"}};
   }
   charts[id]=new Chart(document.getElementById(id),{type,data:{labels,datasets},options});
+}
+
+function formatChartValue(value){
+  const n=Number(value);
+  if(!Number.isFinite(n)) return "";
+  return Number.isInteger(n)?String(n):n.toLocaleString("pt-BR",{maximumFractionDigits:1});
 }
 
 function showError(message,error){
