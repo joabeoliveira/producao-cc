@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produção Cirúrgica — Cirurgia Geral HGB/GHC</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Produção Cirúrgica — Cirurgia Geral HGB/GHC</h1>
+  <span class="badge-periodo">Ago–Out/2026 · Dados internos · LGPD</span>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-page="executiva">Executiva</button>
+  <button class="tab" data-page="producao">Produção</button>
+  <button class="tab" data-page="suspensas">Suspensões</button>
+  <button class="tab" data-page="tempos">Tempos & Qualidade</button>
+</nav>
+
+<section class="filtros">
+  <select id="f-mes"><option value="">Mês (todos)</option></select>
+  <select id="f-sala"><option value="">Sala (todas)</option></select>
+  <select id="f-turno"><option value="">Turno (todos)</option></select>
+  <select id="f-tipo"><option value="">Tipo (todos)</option></select>
+  <select id="f-porte"><option value="">Porte (todos)</option></select>
+  <select id="f-onco"><option value="">Oncológica (todas)</option></select>
+  <button id="f-reset" class="btn-reset">Limpar</button>
+</section>
+
+<main>
+  <!-- EXECUTIVA -->
+  <div class="page active" id="page-executiva">
+    <div class="kpis" id="kpis-exec"></div>
+    <div class="grid-2">
+      <div class="card"><h2>Procedimentos por mês</h2><canvas id="ch-mes"></canvas></div>
+      <div class="card"><h2>Eletiva vs Emergência</h2><canvas id="ch-tipo"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>Mix de porte</h2><canvas id="ch-porte"></canvas></div>
+      <div class="card"><h2>Cirurgias após 22h por mês</h2><canvas id="ch-22h"></canvas></div>
+    </div>
+  </div>
+
+  <!-- PRODUCAO -->
+  <div class="page" id="page-producao">
+    <div class="grid-2">
+      <div class="card"><h2>Procedimentos por dia da semana</h2><canvas id="ch-dia"></canvas></div>
+      <div class="card"><h2>Procedimentos por turno</h2><canvas id="ch-turno"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>Top 10 procedimentos SIGTAP</h2><canvas id="ch-top-proc"></canvas></div>
+      <div class="card"><h2>Top 10 grupos de CID</h2><canvas id="ch-top-cid"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>Produção por sala</h2><canvas id="ch-sala"></canvas></div>
+      <div class="card"><h2>Produção por tipo de anestesia</h2><canvas id="ch-anest"></canvas></div>
+    </div>
+  </div>
+
+  <!-- SUSPENSAS -->
+  <div class="page" id="page-suspensas">
+    <div class="kpis" id="kpis-susp"></div>
+    <div class="grid-2">
+      <div class="card"><h2>Pareto de motivos de suspensão</h2><canvas id="ch-pareto"></canvas></div>
+      <div class="card"><h2>Suspensas por mês</h2><canvas id="ch-susp-mes"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>Suspensas por sala</h2><canvas id="ch-susp-sala"></canvas></div>
+      <div class="card"><h2>Suspensas por tipo de cirurgia</h2><canvas id="ch-susp-tipo"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TEMPOS -->
+  <div class="page" id="page-tempos">
+    <div class="kpis" id="kpis-tempos"></div>
+    <div class="grid-2">
+      <div class="card"><h2>Tempo cirúrgico médio por mês</h2><canvas id="ch-tempo-mes"></canvas></div>
+      <div class="card"><h2>Tempo cirúrgico médio por porte</h2><canvas id="ch-tempo-porte"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>Setup médio (Entrada C.C → Início)</h2><canvas id="ch-setup"></canvas></div>
+      <div class="card"><h2>Pós-cirúrgico médio (Término → Saída S.O)</h2><canvas id="ch-pos"></canvas></div>
+    </div>
+    <div class="card"><h2>Distribuição de duração cirúrgica (min)</h2><canvas id="ch-hist"></canvas></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
