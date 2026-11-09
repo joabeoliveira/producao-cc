@@ -1,8 +1,9 @@
-import pandas as pd, hashlib, re, unicodedata
+import pandas as pd, re, unicodedata
+from pathlib import Path
 from datetime import datetime, time
 
 SRC = "Producao Cirurgia geral Ago-Out - base.csv"
-OUT = "base_tratada.csv"
+OUT = Path("painel-cirurgia/data/base_tratada.csv")
 
 df = pd.read_csv(SRC, encoding="utf-8-sig")
 
@@ -26,11 +27,10 @@ def minutes_between(t1,t2):
     if d2<d1: d2=pd.Timedelta(days=1)+d2  # atravessa meia-noite
     return int((d2-d1).total_seconds()//60)
 
-def anon(nome):
-    if pd.isna(nome) or str(nome).strip()=="": return ""
-    parts=str(nome).strip().split()
-    if len(parts)==1: return parts[0].title()
-    return f"{parts[0].title()} {parts[-1][0].upper()}."
+def codigos_anonimos(serie, prefixo):
+    nomes = sorted({norm(nome) for nome in serie if norm(nome)})
+    mapa = {nome: f"{prefixo}-{i:03d}" for i, nome in enumerate(nomes, 1)}
+    return serie.apply(lambda nome: mapa.get(norm(nome), ""))
 
 # ---------- motivo padronizado ----------
 def pad_motivo(m, det):
@@ -50,8 +50,8 @@ def pad_motivo(m, det):
     return "Outros" if norm(m) or norm(det) else ""
 
 # ---------- limpeza ----------
-df["mes"] = df["Mês"].str.strip().str.lower().map({"agosto":"2026-08","setembro":"2026-09","outubro":"2026-10"})
 df["data_cirurgia"] = pd.to_datetime(df["Data da cirurgia"], dayfirst=True, errors="coerce")
+df["mes"] = df["data_cirurgia"].dt.strftime("%Y-%m")
 df["dia_semana"] = df["data_cirurgia"].dt.day_name().str.lower().replace({
  "monday":"segunda","tuesday":"terça","wednesday":"quarta","thursday":"quinta",
  "friday":"sexta","saturday":"sábado","sunday":"domingo"})
@@ -59,7 +59,7 @@ df["dia_semana"] = df["data_cirurgia"].dt.day_name().str.lower().replace({
 df["status"] = df["Status da cirurgia"].str.strip()
 df["tipo_cirurgia"] = df["Tipo de cirurgia"].str.strip()
 df["porte"] = df["Porte"].fillna("").str.strip()
-df["oncologica"] = df["Cirurgia Oncológica"].fillna("Não").str.strip()
+df["oncologica"] = df["Cirurgia Oncológica"].apply(lambda valor: "Sim" if norm(valor)=="SIM" else "Não")
 df["sala"] = df["Sala"].astype(str).str.strip()
 df["procedencia"] = df["Procedência"].fillna("").astype(str).str.strip()
 df["destino"] = df["Destino"].fillna("").astype(str).str.strip()
@@ -75,6 +75,8 @@ df["procedimento_secundario"] = df["proc_sec"].apply(lambda x: re.sub(r"^\d+\s*-
 df["grupo_sigtap"] = df["proc_princ"].str.extract(r"^(\d{4}\.\d{2}\.\d{2})")
 df["cid"] = df["CID 10"].fillna("").astype(str).str.strip()
 df["grupo_cid"] = df["Descrição CID 10"].fillna("").astype(str).str.strip()
+cid_valido = df["cid"].str.match(r"^[A-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?$", case=False)
+df.loc[~cid_valido, ["cid", "grupo_cid"]] = ""
 df["qtd_sigtap"] = pd.to_numeric(df["Quantidade de procedimentos dentro do mesmo código SIGTAP"], errors="coerce")
 
 # tempos
@@ -89,10 +91,14 @@ df["setup_entrada_inicio_min"] = [minutes_between(a,b) for a,b in zip(df["t_entr
 df["pos_cirurgia_min"]    = [minutes_between(a,b) for a,b in zip(df["t_fim_cir"],df["t_saida_so"])]
 
 df["iniciou_apos_22h"] = df["t_inicio_cir"].apply(lambda t: "Sim" if t and (t.hour>=22 or t.hour<6) else "Não")
-df["tempo_invalido"] = df.apply(lambda r: "Sim" if (r["tempo_cirurgico_min"] is None or r["tempo_cirurgico_min"]<=0) else "Não", axis=1)
+df["tempo_invalido"] = df["tempo_cirurgico_min"].apply(
+    lambda valor: "Sim" if pd.isna(valor) or valor <= 0 or valor > 24 * 60 else "Não"
+)
 
 # turno
-df["turno"] = df["t_inicio_cir"].apply(lambda t: "Noturno" if t and (t.hour>=19 or t.hour<7) else "Diurno")
+df["turno"] = df["t_inicio_cir"].apply(
+    lambda t: "" if t is None else ("Noturno" if t.hour>=19 or t.hour<7 else "Diurno")
+)
 
 # motivo suspensão
 df["motivo_suspensao_padronizado"] = [
@@ -101,14 +107,19 @@ df["motivo_suspensao_padronizado"] = [
 ]
 
 # anonimização
-df["cirurgiao_anon"]  = df["Cirurgião responsável"].apply(anon)
-df["anestesista_anon"]= df["Anestesista (quando houver)"].apply(anon)
+df["cirurgiao_anon"] = codigos_anonimos(df["Cirurgião responsável"], "CIR")
+df["anestesista_anon"] = codigos_anonimos(df["Anestesista (quando houver)"], "ANE")
 
 # deduplicação
-def make_id(r):
-    key = f'{r["CNS do paciente"]}|{r["data_cirurgia"]}|{r["sala"]}|{r["t_inicio_cir"]}|{r["procedimento_principal"]}'
-    return hashlib.md5(key.encode()).hexdigest()[:8]
-df["id_evento"] = df.apply(make_id, axis=1)
+chave_evento = (
+    df["CNS do paciente"].fillna("").astype(str) + "|" +
+    df["data_cirurgia"].astype(str) + "|" +
+    df["sala"].astype(str) + "|" +
+    df["t_inicio_cir"].astype(str) + "|" +
+    df["procedimento_principal"]
+)
+df["id_evento"] = pd.factorize(chave_evento, sort=True)[0] + 1
+df["id_evento"] = df["id_evento"].map(lambda numero: f"EVT-{numero:06d}")
 df = df.drop_duplicates(subset=["id_evento","procedimento_secundario"], keep="first")
 
 cols = ["id_evento","mes","data_cirurgia","dia_semana","turno","status","tipo_cirurgia","porte",
@@ -119,5 +130,6 @@ cols = ["id_evento","mes","data_cirurgia","dia_semana","turno","status","tipo_ci
         "iniciou_apos_22h","tempo_invalido","motivo_suspensao_padronizado",
         "cirurgiao_anon","anestesista_anon"]
 
-df[cols].to_csv(OUT, index=False, encoding="utf-8-sig")
+OUT.parent.mkdir(parents=True, exist_ok=True)
+df[cols].to_csv(OUT, index=False, encoding="utf-8-sig", date_format="%Y-%m-%d")
 print("OK:", OUT, len(df), "linhas")

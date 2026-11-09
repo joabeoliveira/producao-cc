@@ -1,0 +1,14 @@
+.git
+.gitignore
+.agents
+.codex
+.aws
+__pycache__
+*.pyc
+*.pyo
+*.log
+tratar_base.py
+Producao Cirurgia geral Ago-Out - base.csv
+de_para_motivos_suspensao.csv
+dicionario_dados.md
+base_tratada.csv

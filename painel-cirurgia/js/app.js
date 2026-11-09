@@ -6,16 +6,18 @@ const CORES = ["#0b4f8a","#1f8a5b","#e0a800","#c0392b","#6c5ce7","#0984e3","#00b
 Papa.parse("data/base_tratada.csv", {
   download: true, header: true, skipEmptyLines: true,
   complete: (res) => {
+    if (res.errors.length) console.warn("Linhas do CSV com problemas:", res.errors);
     state.rows = res.data.map(r => ({
       ...r,
       qtd_sigtap: Number(r.qtd_sigtap)||0,
-      tempo_cirurgico_min: Number(r.tempo_cirurgico_min)||null,
-      ocupacao_sala_min: Number(r.ocupacao_sala_min)||null,
-      setup_entrada_inicio_min: Number(r.setup_entrada_inicio_min)||null,
-      pos_cirurgia_min: Number(r.pos_cirurgia_min)||null
+      tempo_cirurgico_min: toNumber(r.tempo_cirurgico_min),
+      ocupacao_sala_min: toNumber(r.ocupacao_sala_min),
+      setup_entrada_inicio_min: toNumber(r.setup_entrada_inicio_min),
+      pos_cirurgia_min: toNumber(r.pos_cirurgia_min)
     }));
     initFiltros(); renderAll();
-  }
+  },
+  error: (error) => showError("Não foi possível carregar os dados. Abra o painel usando um servidor local.", error)
 });
 
 function initFiltros(){
@@ -36,8 +38,10 @@ function initFiltros(){
   document.querySelectorAll(".tab").forEach(t=>{
     t.addEventListener("click",()=>{
       document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+      document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected","false"));
       document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
       t.classList.add("active");
+      t.setAttribute("aria-selected","true");
       document.getElementById("page-"+t.dataset.page).classList.add("active");
     });
   });
@@ -67,8 +71,9 @@ function renderExec(){
   const d=filtered(); const real=d.filter(r=>r.status==="Realizada");
   const atos=new Set(real.map(r=>r.id_evento)).size;
   const procExec=real.reduce((s,r)=>s+r.qtd_sigtap,0);
-  const susp=d.filter(r=>r.status==="Suspensa").length;
-  const taxaSusp=d.length? (susp/d.length*100):0;
+  const totalEventos=new Set(d.map(r=>r.id_evento).filter(Boolean)).size;
+  const susp=new Set(d.filter(r=>r.status==="Suspensa").map(r=>r.id_evento).filter(Boolean)).size;
+  const taxaSusp=totalEventos? (susp/totalEventos*100):0;
   const tempoMed=media(real.map(r=>r.tempo_cirurgico_min));
   const ocupMed=media(real.map(r=>r.ocupacao_sala_min));
   const onco=real.filter(r=>r.oncologica==="Sim").length;
@@ -107,9 +112,11 @@ function renderProd(){
 // ---------- SUSPENSAS ----------
 function renderSusp(){
   const d=filtered(); const s=d.filter(r=>r.status==="Suspensa");
-  const taxa=d.length? (s.length/d.length*100):0;
+  const totalEventos=new Set(d.map(r=>r.id_evento).filter(Boolean)).size;
+  const suspEventos=new Set(s.map(r=>r.id_evento).filter(Boolean)).size;
+  const taxa=totalEventos? (suspEventos/totalEventos*100):0;
   document.getElementById("kpis-susp").innerHTML=[
-    kpi("Total suspensas", s.length),
+    kpi("Total suspensas", suspEventos),
     kpi("Taxa de suspensão", taxa.toFixed(1)+"%"),
     kpi("Mês com mais suspensões", topKey(s,"mes") || "—"),
     kpi("Principal motivo", topKey(s,"motivo_suspensao_padronizado") || "—")
@@ -120,4 +127,109 @@ function renderSusp(){
   let acc=0; const perc=sorted.map(([,v])=>{acc+=v;return +(acc/total*100).toFixed(1);});
   chart("ch-pareto","bar", Object.fromEntries(sorted), "Suspensas", false, perc);
   chart("ch-susp-mes","bar", countBy(s,"mes"), "Suspensas");
-  chart("ch-susp-sala","bar", countBy(s
+  chart("ch-susp-sala","bar", countBy(s,"sala"), "Suspensas");
+  chart("ch-susp-tipo","bar", countBy(s,"tipo_cirurgia"), "Suspensas");
+}
+
+// ---------- TEMPOS E QUALIDADE ----------
+function renderTempos(){
+  const d=filtered().filter(r=>r.status==="Realizada" && r.tempo_invalido!=="Sim");
+  const tempo=media(d.map(r=>r.tempo_cirurgico_min));
+  const ocup=media(d.map(r=>r.ocupacao_sala_min));
+  const setup=media(d.map(r=>r.setup_entrada_inicio_min));
+  const pos=media(d.map(r=>r.pos_cirurgia_min));
+  document.getElementById("kpis-tempos").innerHTML=[
+    kpi("Tempo cirúrgico médio", fmtMin(tempo)),
+    kpi("Ocupação média de sala", fmtMin(ocup)),
+    kpi("Setup médio", fmtMin(setup)),
+    kpi("Pós-cirúrgico médio", fmtMin(pos))
+  ].join("");
+  chart("ch-tempo-mes","bar", avgBy(d,"mes","tempo_cirurgico_min"), "Minutos");
+  chart("ch-tempo-porte","bar", avgBy(d,"porte","tempo_cirurgico_min"), "Minutos", true);
+  chart("ch-setup","bar", avgBy(d,"mes","setup_entrada_inicio_min"), "Minutos");
+  chart("ch-pos","bar", avgBy(d,"mes","pos_cirurgia_min"), "Minutos");
+  chart("ch-hist","bar", histogram(d.map(r=>r.tempo_cirurgico_min)), "Cirurgias");
+}
+
+// ---------- HELPERS ----------
+function toNumber(value){
+  if(value===null || value===undefined || String(value).trim()==="") return null;
+  const n=Number(String(value).replace(",","."));
+  return Number.isFinite(n)?n:null;
+}
+
+function media(values){
+  const valid=values.filter(Number.isFinite);
+  return valid.length?valid.reduce((sum,n)=>sum+n,0)/valid.length:null;
+}
+
+function fmtMin(value){ return Number.isFinite(value)?value.toFixed(0)+" min":"—"; }
+
+function countBy(rows,key){
+  return rows.reduce((out,row)=>{
+    const label=row[key] || "Não informado";
+    out[label]=(out[label]||0)+1;
+    return out;
+  },{});
+}
+
+function byMonth(rows){ return countBy(rows,"mes"); }
+
+function topN(rows,key,n){
+  return Object.fromEntries(Object.entries(countBy(rows,key)).sort((a,b)=>b[1]-a[1]).slice(0,n));
+}
+
+function topKey(rows,key){
+  return Object.entries(countBy(rows,key)).sort((a,b)=>b[1]-a[1])[0]?.[0] || "";
+}
+
+function avgBy(rows,groupKey,valueKey){
+  const groups={};
+  rows.forEach(row=>{
+    if(Number.isFinite(row[valueKey])) (groups[row[groupKey]||"Não informado"] ||= []).push(row[valueKey]);
+  });
+  return Object.fromEntries(Object.entries(groups).map(([key,values])=>[key,+media(values).toFixed(1)]));
+}
+
+function histogram(values){
+  const bins=[[0,30],[30,60],[60,90],[90,120],[120,180],[180,240],[240,Infinity]];
+  return Object.fromEntries(bins.map(([start,end])=>[
+    end===Infinity?start+"+":start+"–"+(end-1),
+    values.filter(v=>Number.isFinite(v) && v>=start && v<end).length
+  ]));
+}
+
+function kpi(label,value,sub=""){
+  return `<div class="kpi"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div>${sub?`<div class="sub">${escapeHtml(sub)}</div>`:""}</div>`;
+}
+
+function escapeHtml(value){
+  const el=document.createElement("span");
+  el.textContent=String(value);
+  return el.innerHTML;
+}
+
+function chart(id,type,data,label,horizontal=false,pareto=[]){
+  if(charts[id]) charts[id].destroy();
+  const labels=data.labels || Object.keys(data);
+  const datasets=data.datasets || [{label,data:Object.values(data),backgroundColor:CORES[0]}];
+  if(type==="doughnut" && !data.datasets){ datasets[0].backgroundColor=labels.map((_,i)=>CORES[i%CORES.length]); }
+  if(pareto.length){
+    datasets.push({type:"line",label:"% acumulado",data:pareto,borderColor:CORES[3],backgroundColor:CORES[3],yAxisID:"y1"});
+  }
+  const options={responsive:true,maintainAspectRatio:false,indexAxis:horizontal?"y":"x",plugins:{legend:{display:type==="doughnut" || pareto.length>0}}};
+  if(type!=="doughnut"){
+    options.scales={x:{beginAtZero:true},y:{beginAtZero:true}};
+    if(pareto.length) options.scales.y1={beginAtZero:true,max:100,position:"right",grid:{drawOnChartArea:false},ticks:{callback:v=>v+"%"}};
+  }
+  charts[id]=new Chart(document.getElementById(id),{type,data:{labels,datasets},options});
+}
+
+function showError(message,error){
+  console.error(message,error);
+  const alert=document.createElement("div");
+  alert.className="alert alert-danger m-4";
+  alert.setAttribute("role","alert");
+  alert.textContent=message;
+  document.querySelector("main").prepend(alert);
+}
